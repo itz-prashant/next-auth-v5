@@ -4,6 +4,7 @@ import {PrismaAdapter} from "@auth/prisma-adapter"
 import { db } from "@/lib/db"
 import { getUserById } from "@/data/user"
 import { UserRole } from "@prisma/client"
+import { getTwoFactorConfirmationByUserId } from "./data/two-factor-confirmation"
 
 
 export const {
@@ -26,7 +27,7 @@ export const {
     },
     callbacks: {
         async signIn({user, account}){
-            console.log({user, account})
+            
             //Allow OAuth without email verification
             if(account?.provider !== "credentials") return true;
 
@@ -34,6 +35,16 @@ export const {
 
             // Prevent sign in without email verification 
             if(!existingUser?.emailVerified) return false;
+
+            if(existingUser.isTwofactorEnable){
+                const twoFactorConfirmation = await getTwoFactorConfirmationByUserId(existingUser.id)
+            
+                if(!twoFactorConfirmation) return false;
+
+                await db.twoFactorConfirmation.delete({
+                    where:{id: twoFactorConfirmation.id}
+                })
+            }
 
             return true
         },
@@ -49,7 +60,7 @@ export const {
             return session;
         },
         async jwt({token}) {
-            if(!token.sub) return;
+            if(!token.sub) return null;
             const existingUser = await getUserById(token.sub);
 
             if(!existingUser) return token;
